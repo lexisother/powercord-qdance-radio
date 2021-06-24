@@ -68,6 +68,31 @@ module.exports = class QDanceRadio extends Plugin {
       setTimeout(() => header.classList.remove('ad'), duration * 1000);
     };
     this._updateRPC = (track) => {
+      if (this.qdanceClient.playing == true) {
+        SET_ACTIVITY.handler({
+          socket: {
+            id: 100,
+            application: {
+              id: '817487250153144320',
+              name: 'Q-Dance Radio',
+            },
+            transport: 'ipc',
+          },
+          args: {
+            pid: 10,
+            activity: {
+              name: 'Q-Dance Radio',
+              type: 2,
+              application_id: '817487250153144320',
+              details: `Listening to ${track.title}`,
+              state: `by ${track.artist}`,
+            },
+          },
+        });
+      }
+      this._forceUpdate();
+    };
+    this._stopRPC = () => {
       SET_ACTIVITY.handler({
         socket: {
           id: 100,
@@ -79,20 +104,14 @@ module.exports = class QDanceRadio extends Plugin {
         },
         args: {
           pid: 10,
-          activity: {
-            name: 'Q-Dance Radio',
-            type: 2,
-            application_id: '817487250153144320',
-            details: `Listening to ${track.title}`,
-            state: `by ${track.artist}`,
-          },
+          activity: undefined,
         },
       });
       this._forceUpdate();
     };
     // @TODO: When Powercord can do that on stable branch emit RPC event
     this.qdanceClient.on('playing', this._forceUpdate);
-    this.qdanceClient.on('paused', this._forceUpdate);
+    this.qdanceClient.on('paused', this._stopRPC);
     this.qdanceClient.on('trackChange', this._updateRPC);
     this.qdanceClient.on('advertisement', this._adCallback);
   }

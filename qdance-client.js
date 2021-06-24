@@ -29,7 +29,7 @@ const EventEmitter = require('events');
 const { get } = require('powercord/http');
 
 class QDanceClient extends EventEmitter {
-  constructor () {
+  constructor() {
     super();
     this._poll();
     this.playing = false;
@@ -38,7 +38,7 @@ class QDanceClient extends EventEmitter {
     this.volume = 1;
   }
 
-  async play () {
+  async play() {
     clearInterval(this.interval);
     if (!this.serverMetadata) {
       this.serverMetadata = await this._getStreamEndpoints();
@@ -46,33 +46,44 @@ class QDanceClient extends EventEmitter {
 
     this.playing = true;
     this.sessionId = this._v4();
-    this.audio = new Audio(`${this.serverMetadata.server}/${this.serverMetadata.mountPoint}.mp3?sbmid=${this.sessionId}`);
+    this.audio = new Audio(
+      `${this.serverMetadata.server}/${this.serverMetadata.mountPoint}.mp3?sbmid=${this.sessionId}`,
+    );
     this.audio.volume = this.volume;
     this.emit('playing');
     const subscibe = () => {
       this.audio.removeEventListener('play', subscibe);
-      this.eventSource = new EventSource(`${this.serverMetadata.server}/${this.serverMetadata.mountPoint}_SBM?sbmid=${this.sessionId}`);
-      this.eventSource.addEventListener('message', async msg => {
+      this.eventSource = new EventSource(
+        `${this.serverMetadata.server}/${this.serverMetadata.mountPoint}_SBM?sbmid=${this.sessionId}`,
+      );
+      this.eventSource.addEventListener('message', async (msg) => {
         const data = JSON.parse(msg.data);
         const coverPromise = this._getCover();
-        setTimeout(async () => {
-          if (data.name === 'track') {
-            this._nowPlaying({
-              Title: data.parameters.cue_title,
-              Artist: data.parameters.track_artist_name,
-              CoverImage: await coverPromise
-            });
-          } else if (data.name === 'ad' && data.parameters.ad_type === 'endbreak') {
-            this.emit('advertisement', parseInt(data.parameters.cue_time_duration.split(':').pop()) + 1);
-          }
-        }, data.timestamp === 0 ? 0 : Date.now() - parseInt(data.parameters.cue_time_start) + 3000);
+        setTimeout(
+          async () => {
+            if (data.name === 'track') {
+              this._nowPlaying({
+                Title: data.parameters.cue_title,
+                Artist: data.parameters.track_artist_name,
+                CoverImage: await coverPromise,
+              });
+            } else if (data.name === 'ad' && data.parameters.ad_type === 'endbreak') {
+              this.emit(
+                'advertisement',
+                parseInt(data.parameters.cue_time_duration.split(':').pop()) + 1,
+              );
+            }
+          },
+          data.timestamp === 0 ? 0 : Date.now() - parseInt(data.parameters.cue_time_start) + 3000,
+        );
       });
     };
     this.audio.addEventListener('play', subscibe);
     this.audio.play();
+    this._poll();
   }
 
-  pause () {
+  pause() {
     this.emit('paused');
     this.audio.pause();
     this.eventSource.close();
@@ -82,14 +93,14 @@ class QDanceClient extends EventEmitter {
     this._poll();
   }
 
-  setVolume (volume) {
+  setVolume(volume) {
     this.volume = volume;
     if (this.audio) {
       this.audio.volume = volume;
     }
   }
 
-  shutdown () {
+  shutdown() {
     clearInterval(this.interval);
     if (this.audio) {
       this.audio.pause();
@@ -102,7 +113,7 @@ class QDanceClient extends EventEmitter {
     this.emit('shutdown');
   }
 
-  _poll () {
+  _poll() {
     this.interval = setInterval(async () => {
       const response = await get(QDanceClient.NOW_PLAYING_ENDPOINT);
       if (response.ok) {
@@ -111,7 +122,7 @@ class QDanceClient extends EventEmitter {
     }, 2000);
   }
 
-  async _getCover () {
+  async _getCover() {
     const response = await get(QDanceClient.NOW_PLAYING_ENDPOINT);
     if (response.ok) {
       return response.body.TrackData.NowPlaying.CoverImage;
@@ -119,7 +130,7 @@ class QDanceClient extends EventEmitter {
     return null;
   }
 
-  async _getStreamEndpoints () {
+  async _getStreamEndpoints() {
     const response = await get(QDanceClient.LIVESTREAM_METADATA);
     if (response.ok) {
       const xml = response.body.toString('utf-8');
@@ -128,32 +139,33 @@ class QDanceClient extends EventEmitter {
       const server = `https://${doc.querySelector('servers ip').textContent}`;
       return {
         server,
-        mountPoint
+        mountPoint,
       };
     }
     return null;
   }
 
-  _nowPlaying (track) {
+  _nowPlaying(track) {
     if (!this.track || this.track.artist !== track.Artist || this.track.title !== track.Title) {
       this.track = {
         title: track.Title,
         artist: track.Artist,
-        cover: track.CoverImage
+        cover: track.CoverImage,
       };
       this.emit('trackChange', this.track);
     }
   }
 
-  _v4 () {
+  _v4() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : ((r & 0x3) | 0x8);
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
       return v.toString(16);
     });
   }
 }
 
 QDanceClient.NOW_PLAYING_ENDPOINT = 'https://feed.q-dance.com/onair';
-QDanceClient.LIVESTREAM_METADATA = 'https://playerservices.streamtheworld.com/api/livestream?mount=Q_DANCE&transports=http%2Chls%2Chlsts&version=1.9';
+QDanceClient.LIVESTREAM_METADATA =
+  'https://playerservices.streamtheworld.com/api/livestream?mount=Q_DANCE&transports=http%2Chls%2Chlsts&version=1.9';
 module.exports = QDanceClient;
