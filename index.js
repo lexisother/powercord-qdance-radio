@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Bowser65, All rights reserved.
+ * Copyright (c) 2020 Bowser65 + Alyxia Sother, All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -29,21 +29,27 @@ const { Plugin } = require('powercord/entities');
 const { React, getModule, getModuleByDisplayName } = require('powercord/webpack');
 const { inject, uninject } = require('powercord/injector');
 const { getOwnerInstance, waitFor } = require('powercord/util');
-const { Icons: { FontAwesome } } = require('powercord/components');
+const {
+  Icons: { FontAwesome },
+} = require('powercord/components');
 const { resolve } = require('path');
 
 const QDanceClient = require('./qdance-client');
+const { SET_ACTIVITY } = getModule(['INVITE_BROWSER'], false);
 
 module.exports = class QDanceRadio extends Plugin {
-  constructor () {
+  constructor() {
     super();
     this.qdanceClient = new QDanceClient();
   }
 
-  async startPlugin () {
-    this.loadCSS(resolve(__dirname, 'style.scss'));
-    this.classes = await getModule([ 'container', 'usernameContainer' ]);
-    const instance = getOwnerInstance(await waitFor(`.${this.classes.container}:not(.powercord-spotify)`));
+  async startPlugin() {
+    this.loadStylesheet('style.scss');
+    this.classes = await getModule(['container', 'usernameContainer']);
+
+    const instance = getOwnerInstance(
+      await waitFor(`.${this.classes.container}:not(.powercord-spotify)`),
+    );
 
     await inject('qdance-radio-controls', instance.__proto__, 'render', (_, res) => {
       let og = res; // @TODO: Better Spotify integration
@@ -51,27 +57,47 @@ module.exports = class QDanceRadio extends Plugin {
         // eslint-disable-next-line prefer-destructuring
         og = res[1];
       }
-      return [
-        this.renderFromOriginal(og),
-        res
-      ];
+      return [this.renderFromOriginal(og), res];
     });
 
     instance.forceUpdate();
     this._forceUpdate = () => instance.forceUpdate();
-    this._adCallback = duration => {
+    this._adCallback = (duration) => {
       const header = document.querySelector('.qdance-radio-header');
       header.classList.add('ad');
       setTimeout(() => header.classList.remove('ad'), duration * 1000);
     };
+    this._updateRPC = (track) => {
+      SET_ACTIVITY.handler({
+        socket: {
+          id: 100,
+          application: {
+            id: '817487250153144320',
+            name: 'Q-Dance Radio',
+          },
+          transport: 'ipc',
+        },
+        args: {
+          pid: 10,
+          activity: {
+            name: 'Q-Dance Radio',
+            type: 2,
+            application_id: '817487250153144320',
+            details: `Listening to ${track.title}`,
+            state: `by ${track.artist}`,
+          },
+        },
+      });
+      this._forceUpdate();
+    };
     // @TODO: When Powercord can do that on stable branch emit RPC event
     this.qdanceClient.on('playing', this._forceUpdate);
     this.qdanceClient.on('paused', this._forceUpdate);
-    this.qdanceClient.on('trackChange', this._forceUpdate);
+    this.qdanceClient.on('trackChange', this._updateRPC);
     this.qdanceClient.on('advertisement', this._adCallback);
   }
 
-  pluginWillUnload () {
+  pluginWillUnload() {
     uninject('qdance-radio-controls');
     this.qdanceClient.off('playing', this._forceUpdate);
     this.qdanceClient.off('paused', this._forceUpdate);
@@ -80,14 +106,14 @@ module.exports = class QDanceRadio extends Plugin {
     this.qdanceClient.shutdown();
   }
 
-  renderFromOriginal (res) {
+  renderFromOriginal(res) {
     if (!this.qdanceClient.track) {
       return null;
     }
 
     const MediaBar = getModuleByDisplayName('MediaBar', false);
     const nameComponent = res.props.children[1].props.children({});
-    [ nameComponent.props.className ] = nameComponent.props.className.split(' ');
+    [nameComponent.props.className] = nameComponent.props.className.split(' ');
     nameComponent.props.children[0].props.className = 'qdance-radio-title';
     nameComponent.props.children[1].props.className = 'qdance-radio-artist';
     nameComponent.props.children[0].props.children.props.children = this.qdanceClient.track.title;
@@ -113,80 +139,98 @@ module.exports = class QDanceRadio extends Plugin {
           onMouseLeave: () => void 0,
           className: `${res.props.className || ''} qdance-radio-controls`.trim(),
           children: [
-            React.createElement('div', { className: this.classes.avatarWrapper },
+            React.createElement(
+              'div',
+              { className: this.classes.avatarWrapper },
               React.createElement('img', {
                 src: this.qdanceClient.track.cover,
                 alt: 'Q-Dance now playing cover',
                 className: `${this.classes.avatar} qdance-radio-cover`,
                 style: {
                   width: 32,
-                  height: 32
-                }
-              })
+                  height: 32,
+                },
+              }),
             ),
             nameComponent,
             {
               ...res.props.children[2],
               props: {
                 ...res.props.children[2].props,
-                className: `${res.props.children[2].props.className || ''} qdance-radio-buttons`.trim(),
+                className: `${
+                  res.props.children[2].props.className || ''
+                } qdance-radio-buttons`.trim(),
                 children: [
-                  React.createElement('div', {
-                    className: 'volume',
-                    onClick: e => e.stopPropagation(),
-                    onMouseEnter: () => {
-                      if (this._timeout) {
-                        clearInterval(this._timeout);
-                      }
-                      document.querySelector('.mediaBarProgress-1xaPtl').style.width = `${this.qdanceClient.volume * 100}%`;
-                      document.querySelector('.qdance-radio-buttons').classList.add('volume-show');
-                    },
-                    onMouseLeave: () => {
-                      this._timeout = setTimeout(() => {
-                        document.querySelector('.qdance-radio-buttons').classList.remove('volume-show');
-                      }, 500);
-                    }
-                  }, [
-                    volumeButton,
-                    React.createElement(MediaBar, {
-                      onDrag: v => {
-                        this.qdanceClient.setVolume(v);
-                        document.querySelector('.mediaBarProgress-1xaPtl').style.width = `${v * 100}%`;
-                      },
-                      onDragEnd: () => {
-                        this._timeout = setTimeout(() => {
-                          document.querySelector('.qdance-radio-buttons').classList.remove('volume-show');
-                        }, 500);
-                      },
-                      onDragStart: () => {
+                  React.createElement(
+                    'div',
+                    {
+                      className: 'volume',
+                      onClick: (e) => e.stopPropagation(),
+                      onMouseEnter: () => {
                         if (this._timeout) {
                           clearInterval(this._timeout);
                         }
+                        document.querySelector('.mediaBarProgress-1xaPtl').style.width = `${
+                          this.qdanceClient.volume * 100
+                        }%`;
+                        document
+                          .querySelector('.qdance-radio-buttons')
+                          .classList.add('volume-show');
                       },
-                      type: 'VOLUME',
-                      value: 0,
-                      currentWindow: window
-                    })
-                  ]),
-                  playPause
-                ]
-              }
-            }
-          ]
-        }
-      }
+                      onMouseLeave: () => {
+                        this._timeout = setTimeout(() => {
+                          document
+                            .querySelector('.qdance-radio-buttons')
+                            .classList.remove('volume-show');
+                        }, 500);
+                      },
+                    },
+                    [
+                      volumeButton,
+                      React.createElement(MediaBar, {
+                        onDrag: (v) => {
+                          this.qdanceClient.setVolume(v);
+                          document.querySelector('.mediaBarProgress-1xaPtl').style.width = `${
+                            v * 100
+                          }%`;
+                        },
+                        onDragEnd: () => {
+                          this._timeout = setTimeout(() => {
+                            document
+                              .querySelector('.qdance-radio-buttons')
+                              .classList.remove('volume-show');
+                          }, 500);
+                        },
+                        onDragStart: () => {
+                          if (this._timeout) {
+                            clearInterval(this._timeout);
+                          }
+                        },
+                        type: 'VOLUME',
+                        value: 0,
+                        currentWindow: window,
+                      }),
+                    ],
+                  ),
+                  playPause,
+                ],
+              },
+            },
+          ],
+        },
+      },
     ]);
   }
 
-  renderButton (res, tooltipText, icon, onClick) {
+  renderButton(res, tooltipText, icon, onClick) {
     return {
       ...res.props.children[2].props.children[0],
       props: {
         ...res.props.children[2].props.children[0].props,
         icon: () => React.createElement(FontAwesome, { icon }),
         tooltipText,
-        onClick
-      }
+        onClick,
+      },
     };
   }
 };
