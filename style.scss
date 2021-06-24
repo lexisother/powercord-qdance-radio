@@ -27,14 +27,21 @@
 
 .qdance-radio {
   --qdance-brand: linear-gradient(271deg, #e54114, #e8620b 47%, #f49b05);
-  --qdance-brand-double: linear-gradient(271deg, #f49b05, #e8620b 24%, #e54114 50%, #e8620b 74%, #f49b05);
+  --qdance-brand-double: linear-gradient(
+    271deg,
+    #f49b05,
+    #e8620b 24%,
+    #e54114 50%,
+    #e8620b 74%,
+    #f49b05
+  );
 
   &-header {
     box-sizing: border-box;
     font-weight: 500;
     font-size: 12px;
     padding: 6px 8px 0;
-    margin-bottom: -4px;
+    margin-bottom: 4px;
     text-transform: uppercase;
     background-image: var(--qdance-brand-double);
     width: 214px;
@@ -44,7 +51,8 @@
     }
   }
 
-  &-header, .fas {
+  &-header,
+  .fas {
     -webkit-background-clip: text;
     color: transparent;
   }
@@ -99,7 +107,8 @@
         background-color: #f49b05;
       }
 
-      .mediaBarGrabber-1FqnbN, .mediaBarProgress-1xaPtl:after {
+      .mediaBarGrabber-1FqnbN,
+      .mediaBarProgress-1xaPtl:after {
         background-color: #e54114;
       }
     }
